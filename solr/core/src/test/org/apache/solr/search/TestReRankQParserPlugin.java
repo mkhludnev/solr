@@ -128,6 +128,32 @@ public class TestReRankQParserPlugin extends SolrTestCaseJ4 {
         "//result/doc[5]/str[@name='id'][.='1']",
         "//result/doc[6]/str[@name='id'][.='5']");
 
+    // test with reRankOperator=add by checking score (the order doesn't change)
+    params = new ModifiableSolrParams();
+    params.add(
+        "rq",
+        "{!"
+            + ReRankQParserPlugin.NAME
+            + " "
+            + ReRankQParserPlugin.RERANK_QUERY
+            + "=$rqq "
+            + ReRankQParserPlugin.RERANK_OPERATOR
+            + "=add "
+            + ReRankQParserPlugin.RERANK_DOCS
+            + "=200}");
+    params.add("q", "term_s:YYYY^=0.1"); // force score=0.1
+    params.add("rqq", "{!edismax bf=$bff}*:*");
+    params.add("bff", "field(test_ti)"); // test_ti=5000 for item 3
+    params.add("start", "0");
+    params.add("rows", "6");
+    params.add("df", "text");
+    params.add("fl", "id,score");
+    assertQ(
+        req(params),
+        "*[count(//doc)=6]",
+        "//result/doc[1]/str[@name='id'][.='3']",
+        "//result/doc[1]/float[@name='score'][.='10002.1']"); // multiplying gives 1000.2 instead
+
     // test with reRankOperator=multiply by checking score (the order doesn't change)
     params = new ModifiableSolrParams();
     params.add(
