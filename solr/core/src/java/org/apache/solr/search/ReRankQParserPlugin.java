@@ -84,14 +84,27 @@ public class ReRankQParserPlugin extends QParserPlugin {
 
   private static final class ReRankQueryRescorer extends QueryRescorer {
 
-    final double reRankWeight;
-    final ReRankOperator reRankOperator;
+    final BiFloatFunction scoreCombiner;
+
+    @FunctionalInterface
+    interface BiFloatFunction {
+      float func(float a, float b);
+    }
 
     public ReRankQueryRescorer(
         Query reRankQuery, double reRankWeight, ReRankOperator reRankOperator) {
       super(reRankQuery);
-      this.reRankWeight = reRankWeight;
-      this.reRankOperator = reRankOperator;
+      switch (reRankOperator) {
+        case ADD:
+          scoreCombiner = (score, second) -> (float) (score + reRankWeight * second);
+          break;
+        case MULTIPLY:
+          scoreCombiner = (score, second) -> (float) (score * reRankWeight * second);
+          break;
+        default:
+          scoreCombiner = null;
+          throw new IllegalArgumentException("Unexpected:" + reRankOperator);
+      }
     }
 
     @Override
@@ -99,14 +112,7 @@ public class ReRankQParserPlugin extends QParserPlugin {
         float firstPassScore, boolean secondPassMatches, float secondPassScore) {
       float score = firstPassScore;
       if (secondPassMatches) {
-        switch (reRankOperator) {
-          case ADD:
-            score = (float) (score + reRankWeight * secondPassScore);
-            return score;
-          case MULTIPLY:
-            score = (float) (score * reRankWeight * secondPassScore);
-            return score;
-        }
+        return scoreCombiner.func(score, secondPassScore);
       }
       return score;
     }
