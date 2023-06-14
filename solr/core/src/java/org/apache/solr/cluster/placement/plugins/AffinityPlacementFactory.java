@@ -31,6 +31,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.solr.cluster.Cluster;
 import org.apache.solr.cluster.Node;
 import org.apache.solr.cluster.Replica;
@@ -531,13 +532,13 @@ public class AffinityPlacementFactory implements PlacementPluginFactory<Affinity
             && Optional.ofNullable(withCollections.get(collection))
                 .map(this::hasCollectionOnNode)
                 .orElse(true)
-            // Ensure the disk space will not go below the minimum if the replica is added
+            // Ensure same shard is collocated if required
             && Optional.ofNullable(withCollectionShards.get(collection))
                 .map(
-                    secondaryCollection1 ->
-                        getShardsOnNode(secondaryCollection1)
-                            .contains(replica.getShard().getShardName()))
+                    shardWiseOf ->
+                        getShardsOnNode(shardWiseOf).contains(replica.getShard().getShardName()))
                 .orElse(true)
+            // Ensure the disk space will not go below the minimum if the replica is added
             && (minimalFreeDiskGB <= 0
                 || nodeFreeDiskGB - getProjectedSizeOfReplica(replica) > minimalFreeDiskGB);
       }
@@ -563,12 +564,12 @@ public class AffinityPlacementFactory implements PlacementPluginFactory<Affinity
             continue;
           }
 
-          Set<String> shardWiseCollocations =
+          Stream<String> shardWiseCollocations =
               collocatedCollections.stream()
-                  .filter(priColl -> collection.getName().equals(withCollectionShards.get(priColl)))
-                  .collect(Collectors.toSet());
+                  .filter(
+                      priColl -> collection.getName().equals(withCollectionShards.get(priColl)));
           final Set<String> mandatoryShardsOrAll =
-              shardWiseCollocations.stream()
+              shardWiseCollocations
                   .flatMap(priColl -> getShardsOnNode(priColl).stream())
                   .collect(Collectors.toSet());
           // There are collocatedCollections for this shard, so make sure there is a replica of this
