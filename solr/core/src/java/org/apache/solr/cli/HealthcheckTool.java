@@ -154,12 +154,14 @@ public class HealthcheckTool extends SolrCloudTool {
           q = new SolrQuery("*:*");
           q.setRows(0);
           q.set(DISTRIB, "false");
-          try (var solrClient = SolrCLI.getSolrClient(coreUrl)) {
+          try (var solrClient = SolrCLI.getSolrClient(coreUrl);
+               var nodeClient = SolrCLI.getSolrClient(replicaCoreProps.getBaseUrl())
+          ) {
             qr = solrClient.query(q);
             numDocs = qr.getResults().getNumFound();
 
             NamedList<Object> systemInfo =
-                solrClient.request(
+                nodeClient.request(
                     new GenericSolrRequest(SolrRequest.METHOD.GET, CommonParams.SYSTEM_INFO_PATH));
             uptime = SolrCLI.uptime((Long) systemInfo.findRecursive("jvm", "jmx", "upTimeMS"));
             String usedMemory = (String) systemInfo.findRecursive("jvm", "memory", "used");
