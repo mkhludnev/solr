@@ -130,6 +130,16 @@ public class JoinQParserPlugin extends QParserPlugin {
                 plugin.allowSolrUrls)
             .parse();
       }
+    },
+    joinIndex{
+      @Override
+      Query makeFilter(QParser qparser, JoinQParserPlugin plugin) throws SyntaxError {
+        final JoinParams jParams = parseJoin(qparser);
+        final JoinQuery q =
+                new JoinIndexQuery(jParams.fromField, jParams.toField, jParams.fromCore, jParams.fromQuery);
+        q.fromCoreOpenTime = jParams.fromCoreOpenTime;
+        return q;
+      }
     };
 
     abstract Query makeFilter(QParser qparser, JoinQParserPlugin plugin) throws SyntaxError;

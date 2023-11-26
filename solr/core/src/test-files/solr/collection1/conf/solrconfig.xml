@@ -114,8 +114,14 @@
       initialSize="0"
       autowarmCount="10" />
 
-    <!-- If true, stored fields that are not requested will be loaded lazily.
-    -->
+      <cache name="joinIndex"
+             class="solr.CaffeineCache"
+             size="10"
+             initialSize="0"
+             autowarmCount="10" />
+
+      <!-- If true, stored fields that are not requested will be loaded lazily.
+      -->
     <enableLazyFieldLoading>true</enableLazyFieldLoading>
 
     <!--

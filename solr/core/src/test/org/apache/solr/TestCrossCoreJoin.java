@@ -164,6 +164,11 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
   }
 
   @Test
+  public void testJoinIndex() throws Exception {
+    doTestJoin("{!join method=joinIndex ");
+  }
+
+  @Test
   public void testScoreJoin() throws Exception {
     doTestJoin("{!join " + TestScoreJoinQPNoScore.whateverScore());
   }
