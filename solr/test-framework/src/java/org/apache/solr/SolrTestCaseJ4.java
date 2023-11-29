@@ -1375,6 +1375,10 @@ public abstract class SolrTestCaseJ4 extends SolrTestCase {
   /** Send JSON update commands */
   public static String updateJ(String json, SolrParams args) throws Exception {
     SolrCore core = h.getCore();
+    return updateJ(core, json, args);
+  }
+
+  public static String updateJ(SolrCore core, String json, SolrParams args) throws Exception {
     if (args == null) {
       args = params("wt", "json", "indent", "true");
     } else {
@@ -1761,7 +1765,7 @@ public abstract class SolrTestCaseJ4 extends SolrTestCase {
   public static final IRange ONE_ONE = new IRange(1, 1);
 
   @SuppressWarnings({"rawtypes"})
-  public static class Doc implements Comparable {
+  public static class Doc implements Comparable, Cloneable{
     public Comparable id;
     public List<Fld> fields;
     public int order; // the order this document was added to the index
@@ -1816,6 +1820,15 @@ public abstract class SolrTestCaseJ4 extends SolrTestCase {
         }
       }
       return result;
+    }
+
+    public Doc shallowCopy() {
+      try {
+        return (Doc) super.clone();
+      } catch (CloneNotSupportedException e) {
+        fail(e.getMessage());
+        return null;
+      }
     }
   }
 

@@ -2,15 +2,11 @@ package org.apache.solr.search;
 
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.DocIdSetIterator;
-import org.apache.lucene.util.ArrayUtil;
-import org.apache.lucene.util.BytesRef;
-import org.apache.lucene.util.FixedBitSet;
-import org.apache.lucene.util.RamUsageEstimator;
+import org.apache.lucene.util.*;
 
 import java.io.IOException;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
@@ -31,7 +27,7 @@ public class JoinIndex {
 
         PostingsEnum fromPostings = null;
         PostingsEnum toPostings = null;
-        List<int[]>[] toByFromScratch = null;
+        List<Integer>[] toByFromScratch = null;
         EOF:
         for(BytesRef fromTerm; true;) {
             TermsEnum.SeekStatus fromSeek;
@@ -72,26 +68,23 @@ public class JoinIndex {
                 toDocs[toDocNum++]=toDoc;
             }
             if(toDocNum>0) {
-                toDocs = ArrayUtil.copyOfSubArray(toDocs,0,toDocNum);
+                //toDocs = ArrayUtil.copyOfSubArray(toDocs,0,toDocNum);
                 // dump into toByFrom
                 // allocate scratch
                 int fromDoc;
                 for(fromPostings = fromIter.postings(fromPostings, PostingsEnum.NONE);
                     (fromDoc=fromPostings.nextDoc())!= NO_MORE_DOCS &&
-                            (toCtx.reader().getLiveDocs()==null || toCtx.reader().getLiveDocs().get(toDoc));
+                            (fromCtx.reader().getLiveDocs()==null || fromCtx.reader().getLiveDocs().get(toDoc));
                 ){
                     if (toByFromScratch==null) {
-                        int oversize = ArrayUtil.oversize(fromDoc + 1, RamUsageEstimator.NUM_BYTES_OBJECT_REF);
-                        toByFromScratch = (List<int[]>[]) Array.newInstance(List.class, oversize);
-                    } else {
-                        if (fromDoc >= toByFromScratch.length) {
-                            toByFromScratch = ArrayUtil.grow(toByFromScratch);
-                        }
+                        toByFromScratch = (List<Integer>[]) Array.newInstance(List.class, fromCtx.reader().maxDoc());
                     }
                     if (toByFromScratch[fromDoc]==null){
                         toByFromScratch[fromDoc] = new ArrayList<>();
                     }
-                    toByFromScratch[fromDoc].add(toDocs);
+                    for (int td: toDocs) {
+                        toByFromScratch[fromDoc].add(td);
+                    }
                 }
                 // growScratch
             }
@@ -101,16 +94,12 @@ public class JoinIndex {
         if (toByFromScratch!=null){
             int[][] toByFrom2 = new int[toByFromScratch.length][];//TODO well, max toDoc is a little bit smaller
             int fromDocNum=0;
-           for(List<int[]> docNums:toByFromScratch) {
+           for(List<Integer> docNums:toByFromScratch) {
                if (docNums!=null){
-                   int sz = 0, pos=0;
-                   for (int[] nums:docNums) {
-                       sz+=nums.length;
-                   }
-                   toByFrom2[fromDocNum] = new int[sz];
-                   for (int[] nums:docNums) {
-                       System.arraycopy(nums, 0, toByFrom2[fromDocNum],pos,nums.length /*strongly relies on shrinking*/);
-                       pos+=nums.length;
+                   int  pos=0;
+                   toByFrom2[fromDocNum] = new int[docNums.size()];
+                   for (int nums:docNums) {
+                       toByFrom2[fromDocNum][pos++] = nums;
                    }
                }
                fromDocNum++;
@@ -121,16 +110,27 @@ public class JoinIndex {
             toByFrom = null;
         }
     }
-    // TODO maybe think about sparse format??
+    // TODO maybe think about sparse format?? due to segments it should worth to explore
+
     private final int[][] toByFrom;
 
-    public boolean orIntersection(DocIdSetIterator fromDocs, int firstDocBuffered, FixedBitSet toBuffer) throws IOException {
+    public boolean orIntersection(DocIdSetIterator fromDocs, Bits fromLives, Bits toLives, int firstDocBuffered, FixedBitSet toBuffer) throws IOException {
         int from;
         boolean hit = false;
         while ((from=fromDocs.nextDoc())!=NO_MORE_DOCS) {
+            if (fromLives!=null) {
+                if (!fromLives.get(from)) {
+                    continue;
+                }
+            }
             int[] toDocNums = toByFrom[from];
             if ( toDocNums!=null ) {
                 for (int to : toDocNums) {
+                    if (toLives!=null) {
+                        if(!toLives.get(to)) {
+                            continue;
+                        }
+                    }
                     if (to >= firstDocBuffered && to < firstDocBuffered+toBuffer.length())
                     toBuffer.set(to - firstDocBuffered);
                     hit = true;

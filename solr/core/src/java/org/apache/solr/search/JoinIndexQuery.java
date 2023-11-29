@@ -31,6 +31,7 @@ import java.util.Objects;
  */
 public class JoinIndexQuery extends JoinQuery {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+  public static final int PREFETCH_TO_BITS = 1024;
 
   public JoinIndexQuery(String fromField, String toField, String coreName, Query subQuery) {
     super(fromField, toField, coreName, subQuery);
@@ -105,10 +106,10 @@ public class JoinIndexQuery extends JoinQuery {
                 @Override
                 public boolean matches() throws IOException {
                   int toCandidate = approximation.docID();
-                  boolean buffered = toBuffer != null && firstDocBuffered <= toCandidate && firstDocBuffered + toCandidate < 1024;
+                  boolean buffered = toBuffer != null && firstDocBuffered <= toCandidate && firstDocBuffered + toCandidate < PREFETCH_TO_BITS;
                   if (!buffered) {
                     if (toBuffer == null) {
-                      toBuffer =new FixedBitSet(1024);
+                      toBuffer =new FixedBitSet(PREFETCH_TO_BITS);
                     } else {
                       toBuffer.clear();
                     }
@@ -116,10 +117,13 @@ public class JoinIndexQuery extends JoinQuery {
                     hasToHitsBuffered = false;
                     for (LeafReaderContext fromCtx : fromReader.leaves()) {
                       assert fromReader.leaves().get(fromCtx.ord) == fromCtx;
-                      LeafReader fromReader = fromCtx.reader();
                       DocIdSetIterator fromDocs = fromDocSet.iterator(fromCtx);
                       if (fromDocs!=null) {
-                        boolean hit = fromIndicesByLeafOrd[fromCtx.ord].orIntersection(fromDocs, firstDocBuffered, toBuffer);
+                        boolean hit = fromIndicesByLeafOrd[fromCtx.ord].orIntersection(fromDocs,
+                                fromCtx.reader().getLiveDocs(),
+                                toContext.reader().getLiveDocs(),
+                                firstDocBuffered,
+                                toBuffer);
                         hasToHitsBuffered |= hit;
                       }
                     }
@@ -128,7 +132,7 @@ public class JoinIndexQuery extends JoinQuery {
                 }
                 @Override
                 public float matchCost() {
-                  return 1024;
+                  return PREFETCH_TO_BITS;
                 }
               });
         }
