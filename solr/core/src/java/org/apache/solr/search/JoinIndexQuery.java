@@ -31,7 +31,7 @@ import java.util.Objects;
  */
 public class JoinIndexQuery extends JoinQuery {
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
-  public static final int PREFETCH_TO_BITS = 1024;
+  static int PREFETCH_TO_BITS = 1024;
 
   public JoinIndexQuery(String fromField, String toField, String coreName, Query subQuery) {
     super(fromField, toField, coreName, subQuery);
@@ -106,7 +106,7 @@ public class JoinIndexQuery extends JoinQuery {
                 @Override
                 public boolean matches() throws IOException {
                   int toCandidate = approximation.docID();
-                  boolean buffered = toBuffer != null && firstDocBuffered <= toCandidate && firstDocBuffered + toCandidate < PREFETCH_TO_BITS;
+                  boolean buffered = toBuffer != null && firstDocBuffered <= toCandidate &&  toCandidate-firstDocBuffered < PREFETCH_TO_BITS;
                   if (!buffered) {
                     if (toBuffer == null) {
                       toBuffer =new FixedBitSet(PREFETCH_TO_BITS);
@@ -128,7 +128,7 @@ public class JoinIndexQuery extends JoinQuery {
                       }
                     }
                   }
-                  return hasToHitsBuffered && toBuffer.get(toCandidate+firstDocBuffered);
+                  return hasToHitsBuffered && toBuffer.get(toCandidate-firstDocBuffered);
                 }
                 @Override
                 public float matchCost() {

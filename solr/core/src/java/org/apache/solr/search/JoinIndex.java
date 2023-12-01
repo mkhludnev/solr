@@ -61,7 +61,7 @@ public class JoinIndex {
             int toDocNum = 0 ;
             for(toPostings = toIter.postings(toPostings, PostingsEnum.NONE);
                 (toDoc=toPostings.nextDoc())!= DocIdSetIterator.NO_MORE_DOCS &&
-                        (fromCtx.reader().getLiveDocs()==null || fromCtx.reader().getLiveDocs().get(toDoc));) {
+                        (toCtx.reader().getLiveDocs()==null || toCtx.reader().getLiveDocs().get(toDoc));) {
                 if(toDocNum>=toDocs.length) {
                     toDocs=ArrayUtil.grow(toDocs);
                 }
@@ -74,7 +74,7 @@ public class JoinIndex {
                 int fromDoc;
                 for(fromPostings = fromIter.postings(fromPostings, PostingsEnum.NONE);
                     (fromDoc=fromPostings.nextDoc())!= NO_MORE_DOCS &&
-                            (fromCtx.reader().getLiveDocs()==null || fromCtx.reader().getLiveDocs().get(toDoc));
+                            (fromCtx.reader().getLiveDocs()==null || fromCtx.reader().getLiveDocs().get(fromDoc));
                 ){
                     if (toByFromScratch==null) {
                         toByFromScratch = (List<Integer>[]) Array.newInstance(List.class, fromCtx.reader().maxDoc());
@@ -115,6 +115,9 @@ public class JoinIndex {
     private final int[][] toByFrom;
 
     public boolean orIntersection(DocIdSetIterator fromDocs, Bits fromLives, Bits toLives, int firstDocBuffered, FixedBitSet toBuffer) throws IOException {
+        if (isEmpty()) {
+            return false;
+        }
         int from;
         boolean hit = false;
         while ((from=fromDocs.nextDoc())!=NO_MORE_DOCS) {

@@ -14,8 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.solr;
+package org.apache.solr.search;
 
+import com.carrotsearch.randomizedtesting.annotations.Seed;
+import org.apache.solr.JSONTestUtil;
+import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.common.SolrException.ErrorCode;
 import org.apache.solr.common.params.MapSolrParams;
 import org.apache.solr.common.params.ModifiableSolrParams;
@@ -67,7 +70,6 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
     fromCore = coreContainer.create("fromCore", Map.of("configSet", "minimal",
             "schema", "dyn_fields_nocommit_schema.xml"));
 
-    /* nocommit
     assertU(
         add(
             doc(
@@ -128,7 +130,7 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
                 "text",
                 "These guys develop stuff",
                 "cat",
-                "dev")));
+                "dev")), null);
     update(
         fromCore,
         add(
@@ -140,7 +142,7 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
                 "dept_id_s",
                 "Marketing",
                 "text",
-                "These guys make you look good")));
+                "These guys make you look good")), null);
     update(
         fromCore,
         add(
@@ -152,7 +154,7 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
                 "dept_id_s",
                 "Sales",
                 "text",
-                "These guys sell stuff")));
+                "These guys sell stuff")), null);
     update(
         fromCore,
         add(
@@ -164,8 +166,8 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
                 "dept_id_s",
                 "Support",
                 "text",
-                "These guys help customers")));
-    update(fromCore, commit());*/
+                "These guys help customers")), null);
+    update(fromCore, commit(), null);
   }
 
   public static String update(SolrCore core, String xml, SolrParams params) throws Exception {
@@ -290,9 +292,13 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
   }
 
 
-  @Test
+  static {
+    JoinIndexQuery.PREFETCH_TO_BITS=3;
+  }
+  @Test// @Seed("1229FBCE3AE78D38") TODO extract random test into the separate one
   @SuppressWarnings({"unchecked","rawtypes"})
   public void testRandomJoin() throws Exception {
+
     int indexIter = 50 * RANDOM_MULTIPLIER;
     int queryIter = 50 * RANDOM_MULTIPLIER;
 
@@ -409,9 +415,11 @@ public class TestCrossCoreJoin extends SolrTestCaseJ4 {
                                 + " to="
                                 + toField
                                 + " fromIndex=fromCore"
+                                +" method=joinIndex"
                                 //+ (random().nextInt(4) == 0 ? " fromIndex=collection1" : "")
-                                + "}{!terms f=id}"+fromIdFilter.stream().map(Object::toString).collect(Collectors.joining(",")),
-                        "fq","{!terms f=id}"+toIdFilter.stream().map(Object::toString).collect(Collectors.joining(",")));
+                +"}*:*" //               + "}{!terms f=id}"+fromIdFilter.stream().map(Object::toString).collect(Collectors.joining(",")),
+                //        "fq","{!terms f=id}"+toIdFilter.stream().map(Object::toString).collect(Collectors.joining(","))
+                );
 
         String strResponse = h.query(req);
 
