@@ -55,6 +55,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class TestCrossIndexJoin extends SolrTestCaseJ4 {
 
@@ -201,33 +202,17 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
         @SuppressWarnings({"rawtypes"})
         Map<Comparable, Set<Comparable>> pivot = pivots.get(fromField + "/" + toField);
         if (pivot == null) {
-          pivot = createJoinMap(model, fromField, toField);
+          pivot = createJoinMap(modelFromClone, model, fromField, toField);
           pivots.put(fromField + "/" + toField, pivot);
         }
 
-        Collection<Doc> fromDocs = model.values();
-        List<Comparable> allIds = new ArrayList<>(model.keySet());
-        Collections.shuffle(allIds, random());
-        int splitPos = Math.min(atLeast(random(), 1 + allIds.size() / 2), allIds.size());
-        List<Comparable> matchingIds = allIds.subList(0, splitPos);
-
-        List<Comparable> remainingIds = new ArrayList<>(allIds.subList(splitPos, allIds.size()));
-        Collections.shuffle(remainingIds, random());
-        remainingIds = remainingIds.isEmpty() ? remainingIds : remainingIds.subList(0, random().nextInt(remainingIds.size()));
-        splitPos = remainingIds.isEmpty() ? 0 : random().nextInt(remainingIds.size());
-        List<Comparable> fromIdFilter = new ArrayList<>(matchingIds);
-        List<Comparable> toIdFilter = new ArrayList<>(matchingIds);
-
-        //fromIdFilter.addAll(remainingIds.subList(0, splitPos));
-        fromIdFilter.add("PLACE_HOLDER");
-        // toIdFilter.addAll(remainingIds.subList(splitPos, remainingIds.size()));
-        toIdFilter.add("PLACE_HOLDER");
-        List<Doc> fromSideFiltered = new ArrayList<>(fromDocs);//.stream().filter(d -> matchingIds.contains(d.id)).collect(Collectors.toList());
+        List<Comparable> fromIdFilter = subSet(modelFromClone.keySet());
+        List<Doc> fromSideFiltered = fromIdFilter.stream().map(modelFromClone::get).collect(Collectors.toList());
         @SuppressWarnings({"rawtypes"})
         Set<Comparable> docs = join(fromSideFiltered, pivot);
-        List<Comparable> toSideFiltered = new ArrayList<>(docs);//.stream().filter(toId -> matchingIds.contains(toId)).collect(Collectors.toList());
-        List<Doc> docList = new ArrayList<>(toSideFiltered.size());
-        for (@SuppressWarnings({"rawtypes"}) Comparable id : toSideFiltered) docList.add(model.get(id));
+        List<Comparable> toIdFilter = subSet(docs);
+        List<Doc> docList = new ArrayList<>(toIdFilter.size());
+        for (@SuppressWarnings({"rawtypes"}) Comparable id : toIdFilter) docList.add(model.get(id));
         docList.sort(createComparator("_docid_", true, false, false, false));
         List<Object> sortedDocs = new ArrayList<>();
         for (Doc doc : docList) {
@@ -261,8 +246,9 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
                                   // +" score=none"
                                   //+ " method=joinIndex"
                                   //+ (random().nextInt(4) == 0 ? " fromIndex=collection1" : "")
-                                  + "}*:*" //               + "}{!terms f=id}"+fromIdFilter.stream().map(Object::toString).collect(Collectors.joining(",")),
-                          //        "fq","{!terms f=id}"+toIdFilter.stream().map(Object::toString).collect(Collectors.joining(","))
+                           //       + "}*:*" //
+                           + "}{!terms f=id}"+fromIdFilter.stream().map(Object::toString).collect(Collectors.joining(",")),
+                                  "fq","{!terms f=id}"+toIdFilter.stream().map(Object::toString).collect(Collectors.joining(","))
                   );
 
           String strResponse = h.query(req);
@@ -286,6 +272,15 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
         }
       }
     }
+  }
+
+
+  @SuppressWarnings("rawtypes")
+  private List<Comparable> subSet(Set<Comparable> ids) {
+    List<Comparable> allIds = new ArrayList<>(ids);
+    Collections.shuffle(allIds, random());
+    int splitPos = Math.min(atLeast(random(), 1 + allIds.size() / 2), allIds.size());
+    return allIds.subList(0, splitPos);
   }
 
   @SuppressWarnings({"rawtypes"})
@@ -367,27 +362,22 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
 
   @SuppressWarnings({"rawtypes"})
   Map<Comparable, Set<Comparable>> createJoinMap(
-          Map<Comparable, Doc> model, String fromField, String toField) {
+          Map<Comparable, Doc> fromModel, Map<Comparable, Doc> toModel, String fromField, String toField) {
     Map<Comparable, Set<Comparable>> id_to_id = new HashMap<>();
 
-    Map<Comparable, List<Comparable>> value_to_id = invertField(model, toField);
+    Map<Comparable, List<Comparable>> value_to_id = invertField(toModel, toField);
 
-    for (Comparable fromId : model.keySet()) {
-      Doc doc = model.get(fromId);
+    for (Comparable fromId : fromModel.keySet()) {
+      Doc doc = fromModel.get(fromId);
       List<Comparable> vals = doc.getValues(fromField);
       if (vals == null) continue;
       for (Comparable val : vals) {
         List<Comparable> toIds = value_to_id.get(val);
         if (toIds == null) continue;
-        Set<Comparable> ids = id_to_id.get(fromId);
-        if (ids == null) {
-          ids = new HashSet<>();
-          id_to_id.put(fromId, ids);
-        }
-        for (Comparable toId : toIds) ids.add(toId);
+        Set<Comparable> ids = id_to_id.computeIfAbsent(fromId, k -> new HashSet<>());
+        ids.addAll(toIds);
       }
     }
-
     return id_to_id;
   }
 
