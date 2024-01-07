@@ -3,17 +3,30 @@ package org.apache.solr.search;
 import org.apache.lucene.index.*;
 import org.apache.lucene.search.DocIdSetIterator;
 import org.apache.lucene.util.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.lang.reflect.Array;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
 public class JoinIndex {
+    private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
+
     @SuppressWarnings("unchecked")
     public JoinIndex(String fromField, LeafReaderContext fromCtx, String toField, LeafReaderContext toCtx) throws IOException {
+        if (log.isTraceEnabled()) {
+            log.trace("{} -> {}",fromField,fromCtx);
+            log.trace("-> {}  {}",toField, toCtx);
+        }
         Terms fromTerms = fromCtx.reader().terms(fromField);
         Terms toTerms = toCtx.reader().terms(toField);
         if (fromTerms==null || toTerms==null) {
@@ -60,33 +73,53 @@ public class JoinIndex {
             int [] toDocs = new int[10]; // most times it should be one, I suppose ?? TODO reuse ?? use previous size as estimate?
             int toDocNum = 0 ;
             for(toPostings = toIter.postings(toPostings, PostingsEnum.NONE);
-                (toDoc=toPostings.nextDoc())!= DocIdSetIterator.NO_MORE_DOCS &&
-                        (toCtx.reader().getLiveDocs()==null || toCtx.reader().getLiveDocs().get(toDoc));) {
+                (toDoc=toPostings.nextDoc())!= DocIdSetIterator.NO_MORE_DOCS
+                        ;) {
+                if (toCtx.reader().getLiveDocs()!=null && !toCtx.reader().getLiveDocs().get(toDoc)) {
+                    continue ;
+                }
                 if(toDocNum>=toDocs.length) {
                     toDocs=ArrayUtil.grow(toDocs);
                 }
-                toDocs[toDocNum++]=toDoc;
+                if (toDocNum==0 || (toDocs[toDocNum]!=toDoc && toDocs[0]!=toDoc)) {
+                    toDocs[toDocNum++] = toDoc;
+                }
             }
             if(toDocNum>0) {
                 //toDocs = ArrayUtil.copyOfSubArray(toDocs,0,toDocNum);
                 // dump into toByFrom
                 // allocate scratch
                 int fromDoc;
+                List<Integer> fromDocsTrace=null;
+                if (log.isTraceEnabled()) {
+                    fromDocsTrace = new ArrayList<>();
+                }
                 for(fromPostings = fromIter.postings(fromPostings, PostingsEnum.NONE);
-                    (fromDoc=fromPostings.nextDoc())!= NO_MORE_DOCS &&
-                            (fromCtx.reader().getLiveDocs()==null || fromCtx.reader().getLiveDocs().get(fromDoc));
+                    (fromDoc=fromPostings.nextDoc())!= NO_MORE_DOCS
+                            ;
                 ){
+                    if (fromCtx.reader().getLiveDocs()!=null && !fromCtx.reader().getLiveDocs().get(fromDoc))
+                    {
+                        continue ;
+                    }
                     if (toByFromScratch==null) {
                         toByFromScratch = (List<Integer>[]) Array.newInstance(List.class, fromCtx.reader().maxDoc());
                     }
                     if (toByFromScratch[fromDoc]==null){
                         toByFromScratch[fromDoc] = new ArrayList<>();
                     }
-                    for (int td: toDocs) {
-                        toByFromScratch[fromDoc].add(td);
+                    for (int td=0;td<toDocNum;td++) {
+                        toByFromScratch[fromDoc].add(toDocs[td]);
+                    }
+                    if (log.isTraceEnabled()) {
+                        fromDocsTrace.add( fromDoc + fromCtx.docBase);
                     }
                 }
-                // growScratch
+                if (log.isTraceEnabled()) {
+                    final int [] docNums = toDocs;
+                    log.trace("{}:{}=>{}", fromTerm.utf8ToString(), fromDocsTrace,
+                            Arrays.toString(IntStream.range(0,toDocNum).map(i->docNums[i]+toCtx.docBase).toArray()));
+                }
             }
             targetTerm=null; // toTerm next
         }
@@ -96,10 +129,10 @@ public class JoinIndex {
             int fromDocNum=0;
            for(List<Integer> docNums:toByFromScratch) {
                if (docNums!=null){
-                   int  pos=0;
-                   toByFrom2[fromDocNum] = new int[docNums.size()];
-                   for (int nums:docNums) {
-                       toByFrom2[fromDocNum][pos++] = nums;
+                   LinkedHashSet<Integer> toDocsUniq = new LinkedHashSet<>(docNums);
+                   toByFrom2[fromDocNum] = toDocsUniq.stream().mapToInt(Integer::intValue).toArray();
+                   if (log.isTraceEnabled()) {
+                       log.trace("{} -> {}", fromCtx.docBase+fromDocNum, Arrays.toString(docNums.stream().map(d->d+toCtx.docBase).toArray()));
                    }
                }
                fromDocNum++;
@@ -112,6 +145,7 @@ public class JoinIndex {
     }
     // TODO maybe think about sparse format?? due to segments it should worth to explore
 
+    //private
     private final int[][] toByFrom;
 
     public boolean orIntersection(DocIdSetIterator fromDocs, Bits fromLives, Bits toLives, int firstDocBuffered, FixedBitSet toBuffer) throws IOException {
@@ -134,9 +168,10 @@ public class JoinIndex {
                             continue;
                         }
                     }
-                    if (to >= firstDocBuffered && to < firstDocBuffered+toBuffer.length())
-                    toBuffer.set(to - firstDocBuffered);
-                    hit = true;
+                    if (to >= firstDocBuffered && to < firstDocBuffered+toBuffer.length()) {
+                        toBuffer.set(to - firstDocBuffered);
+                        hit = true;
+                    }
                 }
             }
         }

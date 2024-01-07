@@ -65,6 +65,12 @@ public class JoinIndexQuery extends JoinQuery {
         return createNoMatchesWeight(boost);
       }
 */
+      // TODO track from scores as well
+      DocSet fromDocSet = DocSetUtil.createDocSet(fromSearcher, q, null);// top level stuff, to weight
+
+      if (fromDocSet.size()==0) {
+        return new MatchNoDocsQuery().createWeight(searcher, scoreMode, boost);
+      }
       return new ConstantScoreWeight(this, boost) {
         @SuppressWarnings("unchecked")
         @Override
@@ -91,10 +97,9 @@ public class JoinIndexQuery extends JoinQuery {
                   DocIdSetIterator.all(toContext.reader().maxDoc());
 
           //toContext.reader().getLiveDocs()
-          // TODO track from scores as well
-          DocSet fromDocSet = DocSetUtil.createDocSet(fromSearcher, q, null);
+
           //TODO if (fromDocSet.size()==0) {}, perhaps not necessary
-          final int docBase = toContext.docBase;
+          //final int docBase = toContext.docBase;
           return new ConstantScoreScorer(
               this,
               this.score(),
@@ -106,6 +111,27 @@ public class JoinIndexQuery extends JoinQuery {
                 @Override
                 public boolean matches() throws IOException {
                   int toCandidate = approximation.docID();
+                  /*
+                  for (LeafReaderContext fromCtx : fromReader.leaves()) {
+                    assert fromReader.leaves().get(fromCtx.ord) == fromCtx;
+                    JoinIndex joinIndex = fromIndicesByLeafOrd[fromCtx.ord];
+                    if (!joinIndex.isEmpty()) {
+                      DocIdSetIterator fromDocs = fromDocSet.iterator(fromCtx);
+                      if (fromDocs != null) {
+                        for(int fromDoc=-1; (fromDoc=fromDocs.nextDoc())!=DocIdSetIterator.NO_MORE_DOCS;){
+                          int[] toDocs = joinIndex.toByFrom[fromDoc];
+                          for (int i=0;toDocs!=null && i<toDocs.length; i++) {
+                            if (toDocs[i]==toCandidate){
+                              return true;
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                  }
+                  return false;
+                  /*/
                   boolean buffered = toBuffer != null && firstDocBuffered <= toCandidate &&  toCandidate-firstDocBuffered < PREFETCH_TO_BITS;
                   if (!buffered) {
                     if (toBuffer == null) {
@@ -117,18 +143,22 @@ public class JoinIndexQuery extends JoinQuery {
                     hasToHitsBuffered = false;
                     for (LeafReaderContext fromCtx : fromReader.leaves()) {
                       assert fromReader.leaves().get(fromCtx.ord) == fromCtx;
-                      DocIdSetIterator fromDocs = fromDocSet.iterator(fromCtx);
-                      if (fromDocs!=null) {
-                        boolean hit = fromIndicesByLeafOrd[fromCtx.ord].orIntersection(fromDocs,
-                                fromCtx.reader().getLiveDocs(),
-                                toContext.reader().getLiveDocs(),
-                                firstDocBuffered,
-                                toBuffer);
-                        hasToHitsBuffered |= hit;
+                      JoinIndex joinIndex = fromIndicesByLeafOrd[fromCtx.ord];
+                      if (!joinIndex.isEmpty()) {
+                        DocIdSetIterator fromDocs = fromDocSet.iterator(fromCtx);
+                        if (fromDocs != null) {
+                          boolean hit = joinIndex.orIntersection(fromDocs,
+                                  fromCtx.reader().getLiveDocs(),
+                                  toContext.reader().getLiveDocs(),
+                                  firstDocBuffered,
+                                  toBuffer);
+                          hasToHitsBuffered |= hit;
+                        }
                       }
                     }
                   }
                   return hasToHitsBuffered && toBuffer.get(toCandidate-firstDocBuffered);
+                  //*/
                 }
                 @Override
                 public float matchCost() {
