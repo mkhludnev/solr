@@ -54,17 +54,6 @@ public class JoinIndexQuery extends JoinQuery {
     final SolrIndexSearcher toSearcher = weight.toSearcher;
 
       // TODO get from and to fields, check
-/*
-      final SortedSetDocValues topLevelFromDocValues =
-          validateAndFetchDocValues(fromSearcher, fromField, "from");
-      final SortedSetDocValues topLevelToDocValues =
-          validateAndFetchDocValues(toSearcher, toField, "to");
-      if (topLevelFromDocValues.getValueCount() == 0 || topLevelToDocValues.getValueCount() == 0)
-  */
-   /*   if (false){
-        return createNoMatchesWeight(boost);
-      }
-*/
       // TODO track from scores as well
       DocSet fromDocSet = DocSetUtil.createDocSet(fromSearcher, q, null);// top level stuff, to weight
 
@@ -84,7 +73,8 @@ public class JoinIndexQuery extends JoinQuery {
             SolrCache<JoinIndexKey, JoinIndex> joinIndex = toSearcher.getCache("joinIndex");
             JoinIndex fromToTo = joinIndex.computeIfAbsent(
                     new JoinIndexKey(fromField, fromCtx.id(), toField, toContext.id()),
-                    k -> new JoinIndex(fromField, fromCtx, toField, toContext));
+                    k -> new ParArrJoinIndex(fromField, fromCtx, toField, toContext));
+                    //k -> new ArrayJoinIndex(fromField, fromCtx, toField, toContext));
             fromIndicesByLeafOrd[fromCtx.ord] = fromToTo;
             isEmpty &=fromToTo.isEmpty();
           }
@@ -162,7 +152,7 @@ public class JoinIndexQuery extends JoinQuery {
                 }
                 @Override
                 public float matchCost() {
-                  return PREFETCH_TO_BITS;
+                  return fromDocSet.size();
                 }
               });
         }
