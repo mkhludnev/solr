@@ -17,7 +17,7 @@ import java.util.stream.IntStream;
 
 import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 
-public class ArrayJoinIndex implements JoinIndex {
+public abstract class ArrayJoinIndex implements JoinIndex {
     private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     static class Intersector {

@@ -96,4 +96,47 @@ public class ParArrJoinIndex implements JoinIndex{
     public boolean isEmpty() {
         return fromDocs==null || toDocs==null || this.tuples<=0;
     }
+
+    @Override
+    public JoinIndex reverse() {
+        return new JoinIndex() {
+            @Override
+            public boolean orIntersect(DocIdSetIterator fromDocs, Bits fromLives, Bits toLives, IntPredicate buff) throws IOException {
+                boolean hit = false;
+                if (ParArrJoinIndex.this.tuples<=0){
+                    return false;
+                }
+                for (int from; (from = fromDocs.nextDoc()) != NO_MORE_DOCS; ) {
+                    if (fromLives != null) {
+                        if (!fromLives.get(from)) {
+                            continue;
+                        }
+                    }
+                    for (int toPos=0; toPos<ParArrJoinIndex.this.tuples; toPos++) {
+                         if (from==ParArrJoinIndex.this.toDocs[toPos]) {
+                             int toDoc = ParArrJoinIndex.this.fromDocs[toPos];
+                             if (toLives!=null) {
+                                 if (!toLives.get(toDoc)){
+                                     break;
+                                 }
+                             }
+                             hit|=buff.test(toDoc);
+                             //break; no shotcut to may occurs again
+                         }
+                    }
+                }
+                return hit;
+            }
+
+            @Override
+            public boolean isEmpty() {
+                return ParArrJoinIndex.this.isEmpty();
+            }
+
+            @Override
+            public JoinIndex reverse() {
+                return ParArrJoinIndex.this;
+            }
+        };
+    }
 }

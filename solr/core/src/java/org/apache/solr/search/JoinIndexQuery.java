@@ -71,12 +71,20 @@ public class JoinIndexQuery extends JoinQuery {
           for (LeafReaderContext fromCtx : fromReader.leaves()) {
             assert fromReader.leaves().get(fromCtx.ord) == fromCtx;
             SolrCache<JoinIndexKey, JoinIndex> joinIndex = toSearcher.getCache("joinIndex");
-            JoinIndex fromToTo = joinIndex.computeIfAbsent(
-                    new JoinIndexKey(fromField, fromCtx.id(), toField, toContext.id()),
-                    k -> new ParArrJoinIndex(fromField, fromCtx, toField, toContext));
+            JoinIndex fromToTo ;
+            JoinIndexKey key;
+            boolean reverse;
+            if (reverse = (fromField.compareTo(toField)>0)) {
+              key = new JoinIndexKey(toField, toContext.id(), fromField, fromCtx.id());
+            } else {
+              key = new JoinIndexKey(fromField, fromCtx.id(), toField, toContext.id());
+            }
+            fromToTo = joinIndex.computeIfAbsent(
+                    key,
+                    k -> new ParArrJoinIndex(k.fromField, !reverse ? fromCtx:toContext, k.toField,!reverse? toContext:fromCtx));
                     //k -> new ArrayJoinIndex(fromField, fromCtx, toField, toContext));
-            fromIndicesByLeafOrd[fromCtx.ord] = fromToTo;
-            isEmpty &=fromToTo.isEmpty();
+            fromIndicesByLeafOrd[fromCtx.ord] = reverse ? fromToTo.reverse() : fromToTo;
+            isEmpty &=fromIndicesByLeafOrd[fromCtx.ord].isEmpty();
           }
 
           if (isEmpty) {

@@ -26,4 +26,6 @@ public interface JoinIndex {
     boolean orIntersect(DocIdSetIterator fromDocs, Bits fromLives, Bits toLives, IntPredicate buff) throws IOException;
 
     boolean isEmpty();
+
+    JoinIndex reverse() ;
 }
