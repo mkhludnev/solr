@@ -72,16 +72,15 @@ public class JoinIndexQuery extends JoinQuery {
             assert fromReader.leaves().get(fromCtx.ord) == fromCtx;
             SolrCache<JoinIndexKey, JoinIndex> joinIndex = toSearcher.getCache("joinIndex");
             JoinIndex fromToTo ;
-            JoinIndexKey key;
+            JoinIndexKey key = new JoinIndexKey(fromField, fromCtx, toField, toContext);;
             boolean reverse;
             if (reverse = (fromField.compareTo(toField)>0)) {
-              key = new JoinIndexKey(toField, toContext.id(), fromField, fromCtx.id());
-            } else {
-              key = new JoinIndexKey(fromField, fromCtx.id(), toField, toContext.id());
+              key = key.reverse();
             }
             fromToTo = joinIndex.computeIfAbsent(
                     key,
-                    k -> new ParArrJoinIndex(k.fromField, !reverse ? fromCtx:toContext, k.toField,!reverse? toContext:fromCtx));
+                    k -> new ParArrJoinIndex(k.fromField, k.fromCtx,
+                            k.toField,k.toCtx));
                     //k -> new ArrayJoinIndex(fromField, fromCtx, toField, toContext));
             fromIndicesByLeafOrd[fromCtx.ord] = reverse ? fromToTo.reverse() : fromToTo;
             isEmpty &=fromIndicesByLeafOrd[fromCtx.ord].isEmpty();
@@ -174,11 +173,11 @@ public class JoinIndexQuery extends JoinQuery {
 
   private static class JoinIndexKey {
     final String fromField;
-    final Object fromCtx;
+    final LeafReaderContext fromCtx;
     final String toField;
-    final Object toCtx;
+    final LeafReaderContext toCtx;
 
-    public JoinIndexKey(String fromField, Object fromCtx, String toField, Object toCtx) {
+    public JoinIndexKey(String fromField, LeafReaderContext fromCtx, String toField, LeafReaderContext toCtx) {
       this.fromField = fromField;
       this.fromCtx = fromCtx;
       this.toField = toField;
@@ -190,12 +189,17 @@ public class JoinIndexQuery extends JoinQuery {
       if (this == o) return true;
       if (o == null || getClass() != o.getClass()) return false;
       JoinIndexKey that = (JoinIndexKey) o;
-      return Objects.equals(fromField, that.fromField) && Objects.equals(fromCtx, that.fromCtx) && Objects.equals(toField, that.toField) && Objects.equals(toCtx, that.toCtx);
+      return Objects.equals(fromField, that.fromField) && Objects.equals(fromCtx.id(), that.fromCtx.id()) &&
+              Objects.equals(toField, that.toField) && Objects.equals(toCtx.id(), that.toCtx.id());
     }
 
     @Override
     public int hashCode() {
-      return Objects.hash(fromField, fromCtx, toField, toCtx);
+      return Objects.hash(fromField, fromCtx.id(), toField, toCtx.id());
+    }
+
+    public JoinIndexKey reverse() {
+      return new JoinIndexKey(toField, toCtx, fromField, fromCtx);
     }
   }
 }
