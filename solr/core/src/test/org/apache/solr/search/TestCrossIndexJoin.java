@@ -57,6 +57,7 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+//@Seed("74D90651D15A27E4")
 public class TestCrossIndexJoin extends SolrTestCaseJ4 {
 
   private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
@@ -70,7 +71,8 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
 
     // File testHome = createTempDir().toFile();
     // FileUtils.copyDirectory(getFile("solrj/solr"), testHome);
-    initCore("solrconfig.xml", "schema12.xml", TEST_HOME(), "collection1");
+    // ""
+    initCore("solrconfig-joinindex.xml", "schema12.xml", TEST_HOME(), "collection1");
     final CoreContainer coreContainer = h.getCoreContainer();
 
     fromCore = coreContainer.create("fromCore", Map.of("configSet", "minimal",
@@ -135,8 +137,9 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
     JoinIndexQuery.PREFETCH_TO_BITS=3;
   }
   @Test//
-  //@LogLevel("org.apache.solr.search.JoinIndex=TRACE")// TODO extract random test into the separate one
+  //@LogLevel("org.apache.solr.search.JoinIndex=TRACE")
   @SuppressWarnings({"unchecked","rawtypes"})
+  //@Seed("D53CAE5C37D8904")
   public void testRandomJoin() throws Exception {
 
     int indexIter = 50 * RANDOM_MULTIPLIER;
@@ -146,7 +149,8 @@ public class TestCrossIndexJoin extends SolrTestCaseJ4 {
     // increase test effectiveness by avoiding 0 resultsets much of the time.
     String[][] compat =
             new String[][] {
-                    {"small_s", "small2_s", "small2_ss", "small3_ss"},
+                    {"small_s", "small2_s", "small2_ss", "small3_ss"
+                    },
                 //    {"small_i", "small2_i", "small2_is", "small3_is", "small_i_dv", "small_is_dv"}
             };
 

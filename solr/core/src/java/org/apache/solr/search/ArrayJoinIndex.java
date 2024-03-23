@@ -20,7 +20,7 @@ import static org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS;
 public abstract class ArrayJoinIndex implements JoinIndex {
     private static final Logger log = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-    static class Intersector {
+    public static class Intersector {
         final private String fromField;
         final private LeafReaderContext fromCtx;
         final private String toField;

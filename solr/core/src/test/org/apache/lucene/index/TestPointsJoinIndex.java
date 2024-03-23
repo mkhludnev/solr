@@ -1,6 +1,8 @@
 package org.apache.lucene.index;
 
 import org.apache.lucene.codecs.Codec;
+import org.apache.lucene.codecs.PointsReader;
+import org.apache.lucene.codecs.PointsWriter;
 import org.apache.lucene.codecs.lucene90.Lucene90PointsReader;
 import org.apache.lucene.codecs.lucene90.Lucene90PointsWriter;
 import org.apache.lucene.codecs.lucene95.Lucene95Codec;
@@ -88,7 +90,7 @@ public class TestPointsJoinIndex extends LuceneTestCase {
         }
     }
 
-    private PointValues.IntersectVisitor dumpVisitor(int x0, int y0, int x1, int y1) {
+    public static PointValues.IntersectVisitor dumpVisitor(int x0, int y0, int x1, int y1) {
         byte[] x0b = new byte[Integer.BYTES];
         IntPoint.encodeDimension(x0, x0b, 0);
         byte[] y0b = new byte[Integer.BYTES];
