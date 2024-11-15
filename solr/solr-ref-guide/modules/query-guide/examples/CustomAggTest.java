@@ -70,13 +70,11 @@ public class CustomAggTest extends SolrCloudTestCase {
     private static final String COLLECTION_NAME = "techproducts";
     private static final String CONFIG_NAME = "techproducts_config";
 
+    // tag::custom-agg-impl[]
     public static class CustomFacet extends ValueSourceParser {
-
-
         @Override
         public ValueSource parse(FunctionQParser fp) throws SyntaxError {
             String v = fp.getLocalParams().get("myfield");
-            String obj = fp.getLocalParams().get("myobj");
             return new AggValueSource(fp.getString()) {
                 @Override
                 public FunctionValues getValues(Map<Object, Object> context, LeafReaderContext readerContext) throws IOException {
@@ -110,6 +108,7 @@ public class CustomAggTest extends SolrCloudTestCase {
             };
         }
     }
+    // end::custom-agg-impl[]
 
     @BeforeClass
     public static void setupCluster() throws Exception {
@@ -143,11 +142,12 @@ public class CustomAggTest extends SolrCloudTestCase {
         final int expectedResults = 4;
 
         final ModifiableSolrParams params = new ModifiableSolrParams();
+        // tag::custom-agg-api-req[]
         final SolrQuery query = new SolrQuery("*:*");
-        query.setRows(1);
         query.setParam("json.facet.test_custom_func", Utils.toJSONString(Map.of("type", "func",
-                "func", "custom", "myfield", "test", "myobj", Map.of("key", "val"))));
+                "func", "custom", "myfield", "test")));
         QueryResponse queryResponse = solrClient.query(COLLECTION_NAME, query);
+        // end::custom-agg-api-req[]
         System.out.println(queryResponse);
        // assertResponseFoundNumDocs(queryResponse, expectedResults);
     }

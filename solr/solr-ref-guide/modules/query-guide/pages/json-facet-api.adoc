@@ -1061,3 +1061,31 @@ curl -sS -X POST http://localhost:8983/solr/gettingstarted/query -d 'rows=0&q=*:
 <5> The state of Colorado (CO) has a _negative_ correlation with the nested Foreground Set -- i.e., "People in Colorado are statistically less likely to be '35+ year old Golfers' then the country as a whole."
 <6> The number documents matching `age:[35 TO *]` _and_ `hobbies:golf` _and_ `state:AZ` is 18.75% of the total number of documents in the Background Set
 <7> 50% of the documents in the Background Set match `state:AZ`
+
+=== Custom Aggregations
+
+You can develop your own aggregation as ValueSourceParser (see ..)
+
+[source,java,indent=0]
+----
+include::example$CustomAggTest.java[tag=custom-agg-impl]
+----
+
+deploy jar as a SolrModule (see ..) and enable in a certain collection via Config API (see ..) or just configure it via solrconfig.xml. Mind `agg_` prefix.
+
+[source,bash]
+----
+curl -X POST -H 'Content-type:application/json' -d '{
+"add-valuesourceparser": {
+"name": "agg_custom",
+"class": "org.pkg...CustomFacet",
+}
+}' http://localhost:8983/api/collections/techproducts/config
+----
+
+Then one can invoke custom aggregation via JSON Facet API.
+
+[source,java,indent=0]
+----
+include::example$CustomAggTest.java[tag=custom-agg-api-req]
+----
