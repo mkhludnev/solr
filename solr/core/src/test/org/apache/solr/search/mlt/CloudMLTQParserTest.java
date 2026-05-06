@@ -338,6 +338,39 @@ public class CloudMLTQParserTest extends SolrCloudTestCase {
     assertArrayEquals(expectedIds, actualIds);
   }
 
+  @Test
+  public void testMLTQParserWithSourceDocInAnotherCollection() throws Exception {
+    // Test that {!mlt} can fetch the source document from a different collection when the
+    // collection parameter specifies multiple collections.
+    final CloudSolrClient client = cluster.getSolrClient();
+    final String secondCollection = "mlt-collection-2";
+
+    CollectionAdminRequest.createCollection(secondCollection, "conf", 2, 1).process(client);
+    cluster.waitForActiveCollection(secondCollection, 2, 2);
+    try {
+      // Add the source document (id=100) only to the second collection with content similar to
+      // documents in the first collection.
+      new UpdateRequest()
+          .add(
+              sdoc(
+                  "id", "100", "lowerfilt_u", "The quote red fox jumped over the lazy brown dogs."))
+          .commit(client, secondCollection);
+
+      // Query COLLECTION (first collection) with collection=COLLECTION,secondCollection
+      // The source document (id=100) only exists in secondCollection, so getDocument() must
+      // search across both collections to find it.
+      SolrQuery solrQuery = new SolrQuery("{!mlt qf=lowerfilt_u mindf=0 mintf=1}100");
+      solrQuery.set("collection", COLLECTION + "," + secondCollection);
+      QueryResponse queryResponse = client.query(COLLECTION, solrQuery);
+      SolrDocumentList solrDocuments = queryResponse.getResults();
+      assertTrue(
+          "Expected MLT results from the first collection when source doc is in the second",
+          solrDocuments.size() > 0);
+    } finally {
+      CollectionAdminRequest.deleteCollection(secondCollection).process(client);
+    }
+  }
+
   public void testInvalidSourceDocument() {
     expectThrows(
         SolrException.class,

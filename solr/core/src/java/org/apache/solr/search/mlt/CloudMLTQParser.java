@@ -22,15 +22,21 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.lucene.index.IndexableField;
 import org.apache.lucene.queries.mlt.MoreLikeThis;
 import org.apache.lucene.search.Query;
+import org.apache.solr.client.solrj.SolrServerException;
+import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.cloud.Aliases;
 import org.apache.solr.common.params.ModifiableSolrParams;
 import org.apache.solr.common.params.SolrParams;
 import org.apache.solr.common.util.NamedList;
+import org.apache.solr.common.util.StrUtils;
+import org.apache.solr.core.CoreContainer;
 import org.apache.solr.core.SolrCore;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrQueryRequestBase;
@@ -100,15 +106,45 @@ public class CloudMLTQParser extends SimpleMLTQParser {
 
   private SolrDocument getDocument(String id) {
     SolrCore core = req.getCore();
+    CoreContainer coreContainer = core.getCoreContainer();
+
+    String collectionParam = req.getParams().get("collection");
+    if (collectionParam != null && coreContainer.isZooKeeperAware()) {
+      Aliases aliases = coreContainer.getAliases();
+      List<String> collections = new ArrayList<>();
+      for (String collectionOrAlias : StrUtils.splitSmart(collectionParam, ",", true)) {
+        collections.addAll(aliases.resolveAliases(collectionOrAlias));
+      }
+      CloudSolrClient cloudSolrClient =
+          coreContainer
+              .getSolrClientCache()
+              .getCloudSolrClient(coreContainer.getZkController().getZkServerAddress());
+      for (String collection : collections) {
+        try {
+          SolrDocument doc = cloudSolrClient.getById(collection, id);
+          if (doc != null) {
+            return doc;
+          }
+        } catch (SolrServerException | IOException e) {
+          throw new SolrException(
+              SolrException.ErrorCode.SERVER_ERROR,
+              "Error fetching document with id [" + id + "] from collection [" + collection + "]",
+              e);
+        }
+      }
+      return null;
+    }
+
+    return getDocumentFromCore(id, core);
+  }
+
+  private SolrDocument getDocumentFromCore(String id, SolrCore core) {
     SolrQueryResponse rsp = new SolrQueryResponse();
     ModifiableSolrParams params = new ModifiableSolrParams();
     params.add(ID, id);
-
     SolrQueryRequestBase request = new SolrQueryRequestBase(core, params) {};
-
     core.getRequestHandler("/get").handleRequest(request, rsp);
     NamedList<?> response = rsp.getValues();
-
     return (SolrDocument) response.get("doc");
   }
 
