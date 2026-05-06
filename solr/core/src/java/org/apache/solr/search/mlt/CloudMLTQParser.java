@@ -115,10 +115,7 @@ public class CloudMLTQParser extends SimpleMLTQParser {
       for (String collectionOrAlias : StrUtils.splitSmart(collectionParam, ",", true)) {
         collections.addAll(aliases.resolveAliases(collectionOrAlias));
       }
-      CloudSolrClient cloudSolrClient =
-          coreContainer
-              .getSolrClientCache()
-              .getCloudSolrClient(coreContainer.getZkController().getZkServerAddress());
+      CloudSolrClient cloudSolrClient = coreContainer.getZkController().getSolrClient();
       for (String collection : collections) {
         try {
           SolrDocument doc = cloudSolrClient.getById(collection, id);
