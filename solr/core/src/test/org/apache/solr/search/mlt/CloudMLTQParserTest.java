@@ -339,7 +339,8 @@ public class CloudMLTQParserTest extends SolrCloudTestCase {
   }
 
   @Test
-  public void testMLTQParserWithSourceDocInAnotherCollectionDoesNotThrow() throws Exception {
+  public void testMultiCollectionMLTQParserReturnsNoMatchesWhenSourceDocNotLocal()
+      throws Exception {
     // When the source document is not local, distributed collection fanout should allow the
     // current collection to return no matches instead of throwing while another collection handles
     // its own local source lookup.
@@ -359,7 +360,7 @@ public class CloudMLTQParserTest extends SolrCloudTestCase {
       SolrQuery solrQuery = new SolrQuery("{!mlt qf=lowerfilt_u mindf=0 mintf=1}100");
       solrQuery.set("collection", COLLECTION + "," + secondCollection);
       QueryResponse queryResponse = client.query(COLLECTION, solrQuery);
-      assertNotNull(queryResponse.getResults());
+      assertEquals(0, queryResponse.getResults().size());
     } finally {
       CollectionAdminRequest.deleteCollection(secondCollection).process(client);
     }
