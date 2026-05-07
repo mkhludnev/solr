@@ -22,6 +22,7 @@ import java.util.Arrays;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.impl.CloudSolrClient;
 import org.apache.solr.client.solrj.request.CollectionAdminRequest;
+import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.request.SolrQuery;
 import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
@@ -361,6 +362,33 @@ public class CloudMLTQParserTest extends SolrCloudTestCase {
       solrQuery.set("collection", COLLECTION + "," + secondCollection);
       QueryResponse queryResponse = client.query(COLLECTION, solrQuery);
       assertEquals(0, queryResponse.getResults().size());
+    } finally {
+      CollectionAdminRequest.deleteCollection(secondCollection).process(client);
+    }
+  }
+
+  @Test
+  public void testMultiCollectionMLTQParserReturnsNoMatchesWhenSourceDocNotLocalViaPath()
+      throws Exception {
+    final CloudSolrClient client = cluster.getSolrClient();
+    final String secondCollection = "mlt-collection-2";
+
+    CollectionAdminRequest.createCollection(secondCollection, "conf", 2, 1).process(client);
+    cluster.waitForActiveCollection(secondCollection, 2, 2);
+    try {
+      new UpdateRequest()
+          .add(
+              sdoc(
+                  "id", "100", "lowerfilt_u", "The quote red fox jumped over the lazy brown dogs."))
+          .commit(client, secondCollection);
+
+      QueryRequest queryRequest =
+          new QueryRequest(new SolrQuery("{!mlt qf=lowerfilt_u mindf=0 mintf=1}100"));
+      queryRequest.setPath("/" + COLLECTION + "," + secondCollection + "/select");
+      try (var pathClient = cluster.getJettySolrRunner(0).newClient()) {
+        QueryResponse queryResponse = queryRequest.process(pathClient);
+        assertEquals(0, queryResponse.getResults().size());
+      }
     } finally {
       CollectionAdminRequest.deleteCollection(secondCollection).process(client);
     }
