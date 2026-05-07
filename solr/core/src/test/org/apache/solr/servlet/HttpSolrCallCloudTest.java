@@ -29,8 +29,12 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.client.solrj.request.CollectionAdminRequest;
+import org.apache.solr.client.solrj.request.QueryRequest;
+import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.cloud.AbstractFullDistribZkTestBase;
 import org.apache.solr.cloud.SolrCloudTestCase;
+import org.apache.solr.common.SolrDocumentList;
+import org.apache.solr.common.util.NamedList;
 import org.apache.solr.common.util.SuppressForbidden;
 import org.apache.solr.embedded.JettySolrRunner;
 import org.apache.solr.util.LogListener;
@@ -41,6 +45,7 @@ import org.mockito.Mockito;
 @SolrTestCaseJ4.SuppressSSL
 public class HttpSolrCallCloudTest extends SolrCloudTestCase {
   private static final String COLLECTION = "collection1";
+  private static final String COLLECTION_2 = "collection2";
   private static final int NUM_SHARD = 3;
   private static final int REPLICA_FACTOR = 2;
 
@@ -54,8 +59,12 @@ public class HttpSolrCallCloudTest extends SolrCloudTestCase {
 
     CollectionAdminRequest.createCollection(COLLECTION, "config", NUM_SHARD, REPLICA_FACTOR)
         .process(cluster.getSolrClient());
+    CollectionAdminRequest.createCollection(COLLECTION_2, "config", NUM_SHARD, REPLICA_FACTOR)
+        .process(cluster.getSolrClient());
     AbstractFullDistribZkTestBase.waitForRecoveriesToFinish(
         COLLECTION, cluster.getZkStateReader(), false, true, 30);
+    AbstractFullDistribZkTestBase.waitForRecoveriesToFinish(
+        COLLECTION_2, cluster.getZkStateReader(), false, true, 30);
   }
 
   @Test
@@ -96,6 +105,23 @@ public class HttpSolrCallCloudTest extends SolrCloudTestCase {
       assertTrue(msg, msg.contains(collection));
       assertTrue(msg, msg.contains(handler));
       //      assertTrue(msg, msg.contains(queryKeyVal));
+    }
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  public void testRtgMultipleCollectionsInPath() throws Exception {
+    final String id = "multi-coll-rtg-id";
+    new UpdateRequest().add(sdoc("id", id)).commit(cluster.getSolrClient(), COLLECTION);
+    new UpdateRequest().add(sdoc("id", id)).commit(cluster.getSolrClient(), COLLECTION_2);
+
+    final QueryRequest req = new QueryRequest(params("ids", id));
+    req.setPath("/" + COLLECTION + "," + COLLECTION_2 + "/get");
+    try (var client = cluster.getJettySolrRunner(0).newClient()) {
+      final NamedList<Object> rsp = client.request(req);
+      final SolrDocumentList docs = (SolrDocumentList) rsp.get("response");
+      assertNotNull(docs);
+      assertEquals(2L, docs.getNumFound());
     }
   }
 
