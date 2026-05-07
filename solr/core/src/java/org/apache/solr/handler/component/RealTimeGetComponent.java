@@ -1043,41 +1043,48 @@ public class RealTimeGetComponent extends SearchComponent {
 
     SolrParams params = rb.req.getParams();
 
-    // TODO: handle collection=...?
-
     ZkController zkController = rb.req.getCoreContainer().getZkController();
 
     // if shards=... then use that
     if (zkController != null && params.get(ShardParams.SHARDS) == null) {
-      CloudDescriptor cloudDescriptor = rb.req.getCore().getCoreDescriptor().getCloudDescriptor();
-
-      String collection = cloudDescriptor.getCollectionName();
       ClusterState clusterState = zkController.getClusterState();
-      DocCollection coll = clusterState.getCollection(collection);
 
-      Map<String, List<String>> sliceToId = new HashMap<>();
-      for (String id : reqIds.allIds) {
-        Slice slice =
-            coll.getRouter()
-                .getTargetSlice(id, null, params.get(ShardParams._ROUTE_), params, coll);
-        if (slice == null) {
-          continue;
-        }
-
-        List<String> idsForShard = sliceToId.get(slice.getName());
-        if (idsForShard == null) {
-          idsForShard = new ArrayList<>(2);
-          sliceToId.put(slice.getName(), idsForShard);
-        }
-        idsForShard.add(id);
+      // If collection=... is specified, route against those collections; otherwise use this core's.
+      String collectionParam = params.get("collection");
+      List<String> collectionNames;
+      if (collectionParam != null) {
+        collectionNames = StrUtils.splitSmart(collectionParam, ",", true);
+      } else {
+        CloudDescriptor cloudDescriptor = rb.req.getCore().getCoreDescriptor().getCloudDescriptor();
+        collectionNames = List.of(cloudDescriptor.getCollectionName());
       }
 
-      for (Map.Entry<String, List<String>> entry : sliceToId.entrySet()) {
-        String shard = entry.getKey();
+      // For each (collection, shard) pair, accumulate the IDs to be fetched from that shard.
+      // Key format mirrors the rb.slices entry format used in multi-collection mode: "coll_shard".
+      Map<String, List<String>> sliceKeyToIds = new HashMap<>();
+      Map<String, String[]> sliceKeyToCollShard = new HashMap<>();
+
+      for (String collection : collectionNames) {
+        DocCollection coll = clusterState.getCollection(collection);
+        for (String id : reqIds.allIds) {
+          Slice slice =
+              coll.getRouter()
+                  .getTargetSlice(id, null, params.get(ShardParams._ROUTE_), params, coll);
+          if (slice == null) {
+            continue;
+          }
+          String sliceKey = collection + '_' + slice.getName();
+          sliceKeyToIds.computeIfAbsent(sliceKey, k -> new ArrayList<>(2)).add(id);
+          sliceKeyToCollShard.put(sliceKey, new String[] {collection, slice.getName()});
+        }
+      }
+
+      for (Map.Entry<String, List<String>> entry : sliceKeyToIds.entrySet()) {
+        String[] collShard = sliceKeyToCollShard.get(entry.getKey());
 
         ShardRequest sreq = createShardRequest(rb, entry.getValue());
         // sreq.shards = new String[]{shard};    // TODO: would be nice if this would work...
-        sreq.shards = sliceToShards(rb, collection, shard);
+        sreq.shards = sliceToShards(rb, collShard[0], collShard[1]);
         sreq.actualShards = sreq.shards;
 
         rb.addRequest(this, sreq);
