@@ -20,6 +20,10 @@ package org.apache.solr.request.json;
 import java.util.List;
 import java.util.Map;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrRequestInfo;
+import org.apache.solr.search.JsonConsumerQParserPlugin;
+import org.apache.solr.search.QParserPlugin;
 
 /**
  * Convert json query object to local params.
@@ -133,7 +137,17 @@ class JsonQueryConverter {
       if (tagName != null) {
         subBuilder.append("tag=").append(tagName).append(' ');
       }
-      buildLocalParams(subBuilder, subVal, false, additionalParams);
+      SolrQueryRequest req = SolrRequestInfo.getRequest().get();
+      QParserPlugin plugin = req.getCore().getQueryPlugin(qtype);
+      if (plugin != null && 
+        plugin.getClass().isAnnotationPresent(JsonConsumerQParserPlugin.class)) {
+        subBuilder.append("v=#");
+        String key = Integer.toHexString(System.identityHashCode(subVal));
+        subBuilder.append(key);
+        req.getContext().put(key, subVal);
+      } else {
+        buildLocalParams(subBuilder, subVal, false, additionalParams);
+      }
       subBuilder.append("}");
 
       if (useSubBuilder) {

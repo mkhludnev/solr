@@ -45,7 +45,8 @@ import org.apache.solr.schema.TextField;
  * df} local param, falling back to the {@code df} query param. Example: {@code {all_of: {...}}}
  * with {@code df=title}.
  */
-public class IntervalsQParserPlugin extends QParserPlugin {
+@JsonConsumerQParserPlugin
+public class IntervalsQParserPlugin extends QParserPlugin  {
   public static final String NAME = "intervals";
   private static final int DEFAULT_FUZZY_MAX_EXPANSIONS = Intervals.DEFAULT_MAX_EXPANSIONS;
 
@@ -59,32 +60,37 @@ public class IntervalsQParserPlugin extends QParserPlugin {
   public QParser createParser(
       String qstr, SolrParams localParams, SolrParams params, SolrQueryRequest req) {
     return new QParser(qstr, localParams, params, req) {
+      @SuppressWarnings("unchecked")
       @Override
       public Query parse() {
-        if (qstr == null || qstr.isEmpty() || qstr.charAt(0) != '$' || qstr.length() < 2) {
+        if (qstr == null || qstr.isEmpty() || (qstr.charAt(0) != '$' && qstr.charAt(0) != '#') || qstr.length() < 2) {
           throw new SolrException(SolrException.ErrorCode.BAD_REQUEST, SYNTAX_HELP);
         }
         String jsonQueryName = qstr.substring(1);
+        Object queryDef;
+        if(qstr.charAt(0)=='#'){
+          queryDef = this.req.getContext().get(jsonQueryName);
+        } else {
+          Map<String, Object> json = req.getJSON();
+          if (json == null) {
+            throw new SolrException(
+                SolrException.ErrorCode.BAD_REQUEST, "No JSON request body found; " + SYNTAX_HELP);
+          }
 
-        Map<String, Object> json = req.getJSON();
-        if (json == null) {
-          throw new SolrException(
-              SolrException.ErrorCode.BAD_REQUEST, "No JSON request body found; " + SYNTAX_HELP);
+          Object jsonQueriesObj = json.get(RequestUtil.JSON_QUERIES_KEY);
+          if (!(jsonQueriesObj instanceof Map)) {
+            throw new SolrException(
+                SolrException.ErrorCode.BAD_REQUEST,
+                "No '"
+                    + RequestUtil.JSON_QUERIES_KEY
+                    + "' map found in JSON request body; "
+                    + SYNTAX_HELP);
+          }
+
+          @SuppressWarnings("unchecked")
+          Map<String, Object> jsonQueries = (Map<String, Object>) jsonQueriesObj;
+          queryDef = jsonQueries.get(jsonQueryName);
         }
-
-        Object jsonQueriesObj = json.get(RequestUtil.JSON_QUERIES_KEY);
-        if (!(jsonQueriesObj instanceof Map)) {
-          throw new SolrException(
-              SolrException.ErrorCode.BAD_REQUEST,
-              "No '"
-                  + RequestUtil.JSON_QUERIES_KEY
-                  + "' map found in JSON request body; "
-                  + SYNTAX_HELP);
-        }
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> jsonQueries = (Map<String, Object>) jsonQueriesObj;
-        Object queryDef = jsonQueries.get(jsonQueryName);
 
         if (!(queryDef instanceof Map)) {
           throw new SolrException(
@@ -99,12 +105,18 @@ public class IntervalsQParserPlugin extends QParserPlugin {
 
         Map<String, Object> queryDefMap = asStringObjectMap(queryDef, "json query definition");
 
-        String field = getParam(CommonParams.DF);
-        if (field == null || field.isEmpty()) {
+        String field;
+        if ( 
+          ((field=(String) queryDefMap.get(CommonParams.DF))==null || (field).isEmpty()) &&
+          ((field=(String) queryDefMap.get("use_field"))==null || (field).isEmpty()) && (
+          (field=getParam(CommonParams.DF)) == null || field.isEmpty()
+          ) ) {
           throw new SolrException(
               SolrException.ErrorCode.BAD_REQUEST,
               "Query '" + jsonQueryName + "' requires a 'df' parameter to specify the field");
         }
+        queryDefMap.remove(CommonParams.DF); // clean up urgently
+        queryDefMap.remove("use_field"); // TODO make it wiser
         SchemaField defaultField = req.getSchema().getField(field);
 
         IntervalsSource source = parseRuleObject(queryDefMap, defaultField);
