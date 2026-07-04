@@ -19,6 +19,7 @@ package org.apache.solr.search;
 import org.apache.solr.client.solrj.request.CollectionAdminRequest;
 import org.apache.solr.client.solrj.request.QueryRequest;
 import org.apache.solr.client.solrj.request.UpdateRequest;
+import org.apache.solr.client.solrj.request.json.DirectJsonQueryRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.cloud.SolrCloudTestCase;
 import org.junit.BeforeClass;
@@ -160,6 +161,26 @@ public class DistributedQParserTest extends SolrCloudTestCase {
                     "{json_queries:{q1:{match:{query:quick}},q2:{match:{query:brown}}}}",
                     "fl",
                     "id"))
+            .process(cluster.getSolrClient(), COLLECTION);
+    assertEquals(1, response.getResults().getNumFound());
+  }
+
+  @Test
+  public void testIntervalsJsonQParser() throws Exception {
+    // Pure-JSON style: the interval rule is embedded directly under 'intervals' rather than
+    // referenced via a '$name' pointer into 'json_queries'.
+    // match rule: "quick" appears in docs 1 ("quick brown fox") and 3 ("quick red dog")
+    QueryResponse response =
+        new DirectJsonQueryRequest(
+                "{query:{intervals:{df:subject,match:{query:quick}}},fields:id}")
+            .process(cluster.getSolrClient(), COLLECTION);
+    assertEquals(2, response.getResults().getNumFound());
+
+    // all_of ordered: "quick" then "fox" — only doc 1 ("quick brown fox") matches
+    response =
+        new DirectJsonQueryRequest(
+                "{query:{intervals:{df:subject,all_of:{ordered:true,"
+                    + "intervals:[{match:{query:quick}},{match:{query:fox}}]}}},fields:id}")
             .process(cluster.getSolrClient(), COLLECTION);
     assertEquals(1, response.getResults().getNumFound());
   }

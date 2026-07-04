@@ -20,6 +20,7 @@ package org.apache.solr.request.json;
 import java.util.List;
 import java.util.Map;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.util.Utils;
 import org.apache.solr.request.SolrQueryRequest;
 import org.apache.solr.request.SolrRequestInfo;
 import org.apache.solr.search.JsonConsumerQParserPlugin;
@@ -139,8 +140,7 @@ class JsonQueryConverter {
       }
       SolrQueryRequest req = SolrRequestInfo.getRequest().get();
       QParserPlugin plugin = req.getCore().getQueryPlugin(qtype);
-      if (plugin != null && 
-        plugin.getClass().isAnnotationPresent(JsonConsumerQParserPlugin.class)) {
+      if (plugin instanceof JsonConsumerQParserPlugin) {
         subBuilder.append("v=#");
         String key = Integer.toHexString(System.identityHashCode(subVal));
         subBuilder.append(key);

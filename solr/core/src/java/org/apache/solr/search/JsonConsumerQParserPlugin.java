@@ -1,15 +1,7 @@
 package org.apache.solr.search;
 
-import java.lang.annotation.ElementType;
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-import java.lang.annotation.Target;
-
 /**
- * JsonConsumerQParserPlugin
+ * Marker interface for {@link QParserPlugin}s that consume raw JSON query values directly,
+ * rather than a stringified local params representation.
  */
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
-public @interface JsonConsumerQParserPlugin {
-
-}
+public interface JsonConsumerQParserPlugin {}

@@ -45,8 +45,7 @@ import org.apache.solr.schema.TextField;
  * df} local param, falling back to the {@code df} query param. Example: {@code {all_of: {...}}}
  * with {@code df=title}.
  */
-@JsonConsumerQParserPlugin
-public class IntervalsQParserPlugin extends QParserPlugin  {
+public class IntervalsQParserPlugin extends QParserPlugin implements JsonConsumerQParserPlugin {
   public static final String NAME = "intervals";
   private static final int DEFAULT_FUZZY_MAX_EXPANSIONS = Intervals.DEFAULT_MAX_EXPANSIONS;
 

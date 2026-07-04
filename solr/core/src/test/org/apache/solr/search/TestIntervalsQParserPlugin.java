@@ -16,8 +16,13 @@
  */
 package org.apache.solr.search;
 
+import java.util.List;
+
 import org.apache.solr.SolrTestCaseJ4;
 import org.apache.solr.common.SolrException;
+import org.apache.solr.common.util.ContentStreamBase;
+import org.apache.solr.request.SolrQueryRequest;
+import org.apache.solr.request.SolrQueryRequestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -177,17 +182,21 @@ public class TestIntervalsQParserPlugin extends SolrTestCaseJ4 {
             "{json_queries:{q1:{phrase:{terms:[phrA_quick,phrA_brown,phrA_fox]}}}}"),
         "//result[@numFound='1']",
         "//doc/str[@name='id'][.='50']");
+    String jsonBody;
+    assertJJQ(jsonBody="{query:" +
+                "{intervals:" +
+                        "{df:v_ws,"+ // or `use_field`
+                           "phrase:{terms:[phrA_quick,phrA_brown,phrA_fox]}"+
+                        "}},"
+                + " fields:id"+//", params:{df:v_ws}"+ /// fallback option
+                "}",
+      "/response=={'numFound':2,'start':0,'numFoundExact':true,'docs':[{'id':'50'}]}"
+    );
     assertJQ(
         req(
             "json", // pure JSON query parser
-            "{query:" +
-                "{intervals:" +
-                        "{df:v_ws,"+ // or `use_field`
-                           "phrase:{terms:[phrA_quick,phrA_brown,phrA_fox]}, "+
-                        "}},"
-                + " fields:id"+//", params:{df:v_ws}"+ /// fallback option
-                "}"),
-        "/response=={'numFound':1,'start':0,'numFoundExact':true,'docs':[{'id':'50'}]}");
+            jsonBody),
+        "/response=={'numFound':1,'start':0,'numFoundExact':true,'docs':[{'id':'50'}]}");    
   }
 
   @Test

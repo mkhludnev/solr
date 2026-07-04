@@ -924,6 +924,11 @@ public abstract class SolrTestCaseJ4 extends SolrTestCase {
     return assertJQ(req, JSONTestUtil.DEFAULT_DELTA, tests);
   }
 
+  public static String assertJJQ(String jsonBody, String... tests) throws Exception {
+    SolrQueryRequest jreq = req();
+    ((SolrQueryRequestBase)jreq).setContentStreams(List.of(new ContentStreamBase.StringStream(jsonBody)));              
+    return assertJQ(jreq, JSONTestUtil.DEFAULT_DELTA, tests);
+  }
   /**
    * Validates a query matches some JSON test expressions and closes the query. The text expression
    * is of the form path:JSON. The Noggit JSON parser used accepts single quoted strings and bare
