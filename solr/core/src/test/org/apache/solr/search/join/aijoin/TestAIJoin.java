@@ -26,7 +26,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.function.UnaryOperator;
 import org.apache.lucene.document.Document;
@@ -34,8 +36,10 @@ import org.apache.lucene.document.Field;
 import org.apache.lucene.document.SortedSetDocValuesField;
 import org.apache.lucene.document.StringField;
 import org.apache.lucene.index.DirectoryReader;
+import org.apache.lucene.index.FieldInfo;
 import org.apache.lucene.index.IndexReader;
 import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.LeafReaderContext;
 import org.apache.lucene.index.NoMergePolicy;
 import org.apache.lucene.index.Term;
 import org.apache.lucene.search.BooleanClause;
@@ -240,6 +244,9 @@ public class TestAIJoin extends SolrTestCase {
         "AIJoinQuery disagrees with JoinUtil",
         joinUtilParents,
         searchParentIds(parentsSearcher, joinDecorator.apply(aiJoinQuery)));
+    // builds run in the search thread, so by now every claim must be completed and evicted:
+    // only in-flight dedup state is retained, never the built mappings
+    assertEquals("completed builds must not be retained", 0, joinIndex.inFlightBuilds());
     return joinUtilParents;
   }
 
@@ -548,6 +555,88 @@ public class TestAIJoin extends SolrTestCase {
         searchParentIds(parentsSearcher, filteredJoin);
       }
     }
+  }
+
+  /**
+   * A builder whose searcher predates the refresh that made a pair column visible must not write a
+   * duplicate pair column, even though the completed build's dedup claim has already been evicted
+   * from {@link AIJoinIndex}'s in-flight state: its fresh-searcher re-check finds the persisted
+   * column and skips the write, still handing back a usable in-memory mapping.
+   */
+  public void testStaleBuilderSkipsPersistedPairColumn() throws Exception {
+    try (Directory childrenDir = newDirectory();
+        Directory parentsDir = newDirectory()) {
+      // plain IndexWriters keep each side in a single segment, so exactly one pair exists
+      try (IndexWriter childrenWriter =
+          new IndexWriter(childrenDir, newIndexWriterConfig(new MockAnalyzer(random())))) {
+        for (int c = 0; c < 5; c++) {
+          childrenWriter.addDocument(childDoc("child" + c, "parent0"));
+        }
+      }
+      try (IndexWriter parentsWriter =
+          new IndexWriter(parentsDir, newIndexWriterConfig(new MockAnalyzer(random())))) {
+        parentsWriter.addDocument(parentDoc("parent0", "red"));
+      }
+      try (IndexReader childrenReader = DirectoryReader.open(childrenDir);
+          IndexReader parentsReader = DirectoryReader.open(parentsDir)) {
+        IndexSearcher childrenSearcher = new IndexSearcher(childrenReader);
+        IndexSearcher parentsSearcher = new IndexSearcher(parentsReader);
+        // the first search persists the pair column and completes (thus evicts) its build claim
+        assertEquals(
+            Set.of("parent0"),
+            searchParentIds(
+                parentsSearcher,
+                createAiJoinQuery(
+                    joinIndex, new TermQuery(new Term(ID, "child0")), childrenSearcher)));
+        assertEquals(0, joinIndex.inFlightBuilds());
+
+        LeafReaderContext fromLeaf = childrenReader.leaves().get(0);
+        LeafReaderContext toLeaf = parentsReader.leaves().get(0);
+        String pairFieldName = AIJoinUtil.pairFieldName(fromLeaf, PARENT_ID_FK, toLeaf, PARENT_ID);
+        assertEquals(1, countToCountColumns(pairFieldName));
+
+        // the stale builder: its view never saw the pair, and its claim succeeds since the
+        // completed build is gone from the dedup map
+        @SuppressWarnings("unchecked")
+        Future<FromLeafJoinContext>[] fromColumnFutures =
+            (Future<FromLeafJoinContext>[]) new Future<?>[childrenReader.leaves().size()];
+        fromColumnFutures[fromLeaf.ord] =
+            CompletableFuture.completedFuture(
+                new FromLeafJoinContext(null, new ForeignKeyColumn(fromLeaf, PARENT_ID_FK)));
+        Map<String, AIJoinUtil.JoinColumnModel> rebuilt =
+            joinIndex.writeJoinSegments(
+                Map.of(pairFieldName, new AIJoinIndex.SegmentsTuple(fromLeaf.ord, toLeaf.ord)),
+                childrenReader,
+                PARENT_ID_FK,
+                parentsReader,
+                PARENT_ID,
+                AIJoinIndex.BuildCause.LAZY_TO_SEGMENT,
+                null,
+                fromColumnFutures);
+        // it still gets a usable in-memory mapping, but no duplicate column hits the sidecar
+        assertNotNull(rebuilt.get(pairFieldName));
+        assertEquals(0, joinIndex.inFlightBuilds());
+        assertEquals(1, countToCountColumns(pairFieldName));
+      }
+    }
+  }
+
+  /** How many sidecar segments carry the given pair's {@code toCount} companion column. */
+  private int countToCountColumns(String pairFieldName) throws IOException {
+    int count = 0;
+    IndexSearcher joinSearcher = joinIndex.acquire();
+    try {
+      for (LeafReaderContext leaf : joinSearcher.getIndexReader().leaves()) {
+        for (FieldInfo fieldInfo : leaf.reader().getFieldInfos()) {
+          if (fieldInfo.name.equals(AIJoinUtil.TO_COUNT_PREFIX + pairFieldName)) {
+            count++;
+          }
+        }
+      }
+    } finally {
+      joinIndex.release(joinSearcher);
+    }
+    return count;
   }
 
   public void testJoinWithParentTermFilter() throws Exception {
