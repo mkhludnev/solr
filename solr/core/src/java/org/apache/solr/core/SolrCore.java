@@ -720,6 +720,10 @@ public class SolrCore implements SolrInfoBean, Closeable {
         SolrEventListener obj = createEventListener(info);
         newSearcherListeners.add(obj);
         log.debug("Added SolrEventListener for newSearcher: [{}]", obj);
+      } else if ("postNewSearcher".equals(event)) {
+        SolrEventListener obj = createEventListener(info);
+        postNewSearcherListeners.add(obj);
+        log.debug("Added SolrEventListener for postNewSearcher: [{}]", obj);
       }
     }
   }
@@ -737,6 +741,7 @@ public class SolrCore implements SolrInfoBean, Closeable {
 
   final List<SolrEventListener> firstSearcherListeners = new ArrayList<>();
   final List<SolrEventListener> newSearcherListeners = new ArrayList<>();
+  final List<SolrEventListener> postNewSearcherListeners = new ArrayList<>();
 
   /**
    * NOTE: this function is not thread safe. However, it is safe to call within the <code>
@@ -2686,6 +2691,15 @@ public class SolrCore implements SolrInfoBean, Closeable {
                     // registerSearcher will decrement onDeckSearchers and
                     // do a notify, even if it fails.
                     registerSearcher(newSearchHolder);
+                    if (currSearcher != null && newSearcher != currSearcher) {
+                      for (SolrEventListener listener : postNewSearcherListeners) {
+                        try {
+                          listener.newSearcher(newSearcher, currSearcher);
+                        } catch (Exception e) {
+                          log.error("Exception firing postNewSearcher listener {}", listener, e);
+                        }
+                      }
+                    }
                   } catch (Throwable e) {
                     log.error("Exception registering new searcher", e);
                     if (e instanceof Error) {

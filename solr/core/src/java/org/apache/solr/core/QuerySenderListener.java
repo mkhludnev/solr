@@ -58,46 +58,48 @@ public class QuerySenderListener extends AbstractSolrEventListener {
         if (params.get(DISTRIB) == null) {
           params.add(DISTRIB, false);
         }
-        SolrQueryRequest req = SolrQueryRequest.wrapSearcher(searcher, params.toSolrParams());
-        SolrQueryResponse rsp = new SolrQueryResponse();
-        SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
-        try {
-          getCore()
-              .execute(getCore().getRequestHandler(req.getParams().get(CommonParams.QT)), req, rsp);
-
-          // Retrieve the Document instances (not just the ids) to warm
-          // the OS disk cache, and any Solr document cache.  Only the top
-          // level values in the NamedList are checked for DocLists.
-          NamedList<?> values = rsp.getValues();
-          for (int i = 0; i < values.size(); i++) {
-            Object o = values.getVal(i);
-            SolrDocumentFetcher docFetcher = null;
-            if (o instanceof ResultContext ctx) {
-              o = ctx.getDocList();
-              docFetcher = ctx.getDocFetcher();
-            }
-            if (o instanceof DocList docs) {
-              if (docFetcher == null) {
-                docFetcher = newSearcher.getDocFetcher();
-              }
-              for (DocIterator iter = docs.iterator(); iter.hasNext(); ) {
-                docFetcher.doc(iter.nextDoc());
-              }
-            }
-          }
-        } finally {
-          try {
-            req.close();
-          } finally {
-            SolrRequestInfo.clearRequestInfo();
-          }
-        }
+        executeQuery(searcher, params);
       } catch (Exception e) {
-        // do nothing... we want to continue with the other requests.
-        // the failure should have already been logged.
+        log.warn("Failed to execute warming query {}", nlst, e);
       }
     }
     log.info("QuerySenderListener done.");
+  }
+
+  static void executeQuery(SolrIndexSearcher searcher, NamedList<Object> params) throws Exception {
+    SolrQueryRequest req = SolrQueryRequest.wrapSearcher(searcher, params.toSolrParams());
+    SolrQueryResponse rsp = new SolrQueryResponse();
+    SolrRequestInfo.setRequestInfo(new SolrRequestInfo(req, rsp));
+    try {
+      SolrCore core = searcher.getCore();
+      core.execute(core.getRequestHandler(req.getParams().get(CommonParams.QT)), req, rsp);
+      if (rsp.getException() != null) {
+        throw rsp.getException();
+      }
+      NamedList<?> values = rsp.getValues();
+      for (int i = 0; i < values.size(); i++) {
+        Object o = values.getVal(i);
+        SolrDocumentFetcher docFetcher = null;
+        if (o instanceof ResultContext ctx) {
+          o = ctx.getDocList();
+          docFetcher = ctx.getDocFetcher();
+        }
+        if (o instanceof DocList docs) {
+          if (docFetcher == null) {
+            docFetcher = searcher.getDocFetcher();
+          }
+          for (DocIterator iter = docs.iterator(); iter.hasNext(); ) {
+            docFetcher.doc(iter.nextDoc());
+          }
+        }
+      }
+    } finally {
+      try {
+        req.close();
+      } finally {
+        SolrRequestInfo.clearRequestInfo();
+      }
+    }
   }
 
   protected static List<NamedList<Object>> convertQueriesToList(ArrayList<Object> queries) {

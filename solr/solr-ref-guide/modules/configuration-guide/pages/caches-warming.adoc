@@ -357,6 +357,31 @@ A key best practice is to modify these defaults before taking your application t
 There is no point in auto-warming your Searcher with the query string "static firstSearcher warming in solrconfig.xml" if that is not relevant to your search application.
 ====
 
+=== Warming Other Local Cores
+
+`solr.OtherCoreQuerySenderListener` runs warming queries on other local cores after this core's new searcher is registered.
+This is useful for warming joins that depend on the newly visible data.
+Configure it under `<query>` in the core containing the data that changes, using the `postNewSearcher` event:
+
+[source,xml]
+----
+<listener event="postNewSearcher" class="solr.OtherCoreQuerySenderListener">
+  <str name="targetCore">products</str>
+  <arr name="queries">
+    <lst><str name="q">{!join from=id to=category_id_s fromIndex=categories}*:*</str></lst>
+  </arr>
+</listener>
+----
+
+In standalone mode, `targetCore` names the core to warm.
+In SolrCloud, replace `targetCore` with `targetCollection`; the listener queries every loaded local replica of that collection, not remote replicas.
+Set `<bool name="sameShard">true</bool>` to restrict warming to replicas with the same shard name as the source, for example when using `withCollectionShards` placement affinity.
+This filter matches shard names, not hash ranges; the collections must use compatible shard names and routing.
+Warming queries are local (`distrib=false`) and failures are logged.
+Only searcher changes trigger the listener: commits without a new searcher do not.
+The new source searcher is already visible while warming runs, and unavailable target cores or replicas are skipped.
+Commits that wait for the searcher also wait for these queries, and subsequent searcher registrations on that core wait for them to finish.
+
 ### Managing warming queries with the Config API
 
 Warming queries may be managed using the xref:config-api.adoc[Config API] using commands such as the below.
