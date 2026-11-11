@@ -31,6 +31,10 @@ public interface SolrEventListener extends NamedListInitializedPlugin {
    * so care should be taken not to spawn threads or asynchronous tasks with references to these
    * searchers.
    *
+   * <p>For a {@code postNewSearcher} listener, the new searcher is already registered before this
+   * method is called. Other searcher listeners normally run before registration, except when {@code
+   * useColdSearcher} registers the first searcher early.
+   *
    * <p>Implementations should add the {@link org.apache.solr.common.params.EventParams#EVENT}
    * parameter and set it to a value of either:
    *
